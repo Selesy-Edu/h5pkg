@@ -1,0 +1,306 @@
+#!/usr/bin/env ruby
+# @author SELESY
+
+require 'json'
+require 'rest-client'
+require 'mkmf'
+require 'colorize'
+
+# Convert ARGV to a Hash using pairs of argv
+#
+# @note This function only works with an even length ARGV
+# @example An even ARGV Hashes in pairs
+#   ARGV = ['pack', '/a/folder']
+#   argv_to_hash(ARGV, {}) #=> {'pack' => '/a/folder'}
+#
+# @param argv [Array] Array of arguments
+# @param hash [Hash] Hash which stores the final result
+# @return [Hash] Hashed ARGV
+def argv_to_hash(argv, hash)
+  if argv.empty? || argv.length.odd?
+    hash
+  else
+    key, arg, *tail = argv
+    hash[key] = arg
+    argv_to_hash(tail, hash)
+  end
+end
+
+# Downloads the registry.json file from h5p and
+# returns a hashed version
+#
+# @return [Hash] Hashed registry.json
+def retrieve_h5p_registry
+  response = RestClient.get 'https://h5p.org/registry.json', { accept: :json }
+  JSON.parse(response)
+end
+
+# Builds a Hash with https clone adresses instead ssh addresses
+#
+# @param old_registry [Hash] The original registry.json file
+# @return [Hash] A hash when the keys are the name of the library (machineName). Each
+# key has as value another hash with the following structure:
+# {'version' => [String] , 'machineName' => [String], 'repository' => [String]}
+def setup_https_h5p_registry(old_registry)
+  output = {}
+  old_registry['libraries'].each do |_, library|
+    title = library['machineName'].to_s
+    content = {
+      'version' => library['version'],
+      'machineName' => title,
+      'repository' => library['repository'].sub('git@github.com:h5p/', 'https://github.com/h5p/')
+    }
+    output[title] = content
+  end
+  output
+end
+
+# List all tags available in a GitHub repo using X.Y.Z format
+#
+# @param repo [String] URL of the GitHub repo
+# @return [Array<String>] List of available tags
+def scan_for_versions(repo)
+  `git ls-remote #{repo}`.scan(/\d\.\d\.\d/)
+end
+
+# Check if the program has the minimum parameters to run
+#
+# @param argv_hash [Hash] Hashed ARGV
+# @return [Boolean]
+def minimum_params?(argv_hash)
+  argv_hash.key?('pack') ? true : false
+end
+
+# Checks if the h5p folder has the required files by specification
+#
+# @param folder [String] Path of the folder which contains the H5P project
+# @return [Hash] A hash which shows the required files as keys and boolean values
+# representing the existence of the file
+def check_h5p_folder_integrity(folder)
+  {
+    'library.json' => File.exist?("#{folder}/library.json"),
+    'semantics.json' => File.exist?("#{folder}/semantics.json")
+  }
+end
+
+# Show the last patch of a H5P GitHub repo available by version 
+#
+# @param ver [String] Version to search (X.Y format)
+# @param repo [String] URL of the GitHub repo
+# @return [String] The last patch version available
+def get_last_patch(ver, repo)
+  scan_for_versions(repo)
+    .select { |version| version[/#{ver}.\d/] }
+    .last
+end
+
+# Get the name(machineName) of the H5P project folder
+#
+# @note It returns the name without dots
+# @param folder [String] Root folder of the H5P project
+# @return [String]
+def get_pkg_name(folder)
+  file = File.read("#{folder}/library.json")
+  j = JSON.parse(file)
+  "#{j['machineName'].gsub('.', '')}-#{j['majorVersion']}.#{j['minorVersion']}.#{j['patchVersion']}"
+end
+
+# Generate a list of dependencies with a given H5P project folder
+#
+# @param folder [String] Root folder of the H5P project
+# @return [Array<Hash>] List of dependencies
+def h5p_folder_deps(folder)
+  file = File.read("#{folder}/library.json")
+  jsondeps = JSON.parse(file)
+  make_deps_list(jsondeps, 'preloadedDependencies') + make_deps_list(jsondeps, 'editorDependencies')
+end
+
+# Turns a machineName into a lowercase non-symbols string
+#
+# @param h5pname [String] Any machineName
+# @return [String]
+def h5p_to_git_name(h5pname)
+  h5pname
+    .sub('H5P', 'h5p')
+    .gsub('.', '')
+    .gsub(/-\d+/, '')
+    .downcase
+end
+
+# Lowercase and remove hyphens from a string
+#
+# @param name [String] Any string
+# @return [String]
+def filtered_name(name)
+  name
+    .gsub('-', '')
+    .downcase
+end
+
+# Get all the repos stored by H5P Team
+#
+# @return [Array<Hash>] A list of all repos by H5P
+def get_all_h5p_github
+  response1 = RestClient.get 'https://api.github.com/users/h5p/repos?per_page=100&page=1', { accept: :json }
+  response2 = RestClient.get 'https://api.github.com/users/h5p/repos?per_page=100&page=2', { accept: :json }
+  r1 = JSON.parse(response1)
+  r2 = JSON.parse(response2)
+  r1 + r2
+end
+
+# List all the dependencies needed by the H5P project
+#
+# @param library [Hash] Hashed library.json file
+# @param field [String] Dependency field inside library.json  
+# @return [Array]
+def make_deps_list(library, field)
+  list = []
+  unless library[field].empty?
+    library[field].each do |elem|
+      list.append(
+        {
+          'name' => elem['machineName'],
+          'version' => "#{elem['majorVersion']}.#{elem['minorVersion']}"
+        }
+      )
+    end
+  end
+  list
+end
+
+# Checks if a GitHub repo exists
+#
+# @param repo [String] URL of the repo
+# return [Boolean]
+def git_repo_exists?(repo)
+  response = RestClient.get repo, { accept: :json }
+  response.code == 200
+rescue RestClient::NotFound
+  false
+end
+
+# Remove .git folders recursively
+#
+# @param folder [String] Root folder of the H5P project
+# @return [Boolean]
+def remove_git_init_folders(folder)
+  system "( find #{folder} -type d -name '.git' && find . -name '.gitignore' && find . -name '.gitmodules' ) | xargs rm -rf "
+end
+
+# Clones a Git tag (detached)
+#
+# @param dest_folder [String] Destination folder
+# @param git_repo_url [String] URL of the Git repo
+# @param pkg_ver [String] tag (branch)
+# @return [Boolean]
+def download_library(dest_folder, git_repo_url, pkg_ver)
+  system "git clone #{git_repo_url} --branch #{pkg_ver} --single-branch #{dest_folder}"
+end
+
+# Zips recursively a folder and moves the zip to home
+#
+# @param folder [String] Root folder of the H5P project
+# @param output_filename [String] File name of the ZIP
+# @return [Boolean]
+def unix_zip(folder, output_filename)
+  system "cd #{folder} && zip -r #{output_filename} ./* && mv #{output_filename} ~"
+end
+
+# Prints an error and sets an exit code
+def exit_with_error
+  puts 'ERROR'.colorize({ color: :white, background: :red })
+  exit(-1)
+end
+
+# Prints OK
+def print_ok
+  puts 'OK'.colorize({ color: :white, background: :green })
+end
+
+# ------------------------------------------- START ------------------------------------------------ #
+
+argv_hashed = argv_to_hash(ARGV, {})
+
+if argv_hashed.empty? || !minimum_params?(argv_hashed)
+  puts 'Usage: h5pkg pack [FOLDER]'
+  exit(-1)
+end
+
+puts 'H5P Packer'.colorize({ color: :white, background: :magenta, mode: :blink })
+
+folder = argv_hashed['pack'].delete_suffix('/')
+required_files = check_h5p_folder_integrity(folder)
+
+print 'Checking if library.json exists ... '.colorize(:cyan)
+if required_files['library.json'] == false
+  exit_with_error
+else
+  print_ok
+end
+
+print 'Checking if semantics.json exists ... '.colorize(:cyan)
+if required_files['semantics.json'] == false
+  exit_with_error
+else
+  print_ok
+end
+
+puts 'Checking for dependencies ... '.colorize(:cyan)
+registry = setup_https_h5p_registry(retrieve_h5p_registry)
+exit_with_error if registry.empty?
+
+all_github = get_all_h5p_github
+
+deplist = h5p_folder_deps(folder)
+if deplist.empty?
+  puts 'No dependencies detected'
+else
+  puts deplist
+  puts 'Downloading dependencies ... '.colorize(:cyan)
+  deplist.each do |dependency|
+    name = dependency['name']
+    fullname = "#{name}-#{dependency['version']}"
+    dest_folder = "#{folder}/#{fullname}"
+
+    next if Dir.exist?(dest_folder)
+
+    repo = registry.dig(name, 'repository')
+    if repo.nil?
+      puts "Repository #{name} not found in the H5P registry".colorize(:red)
+      print 'Trying to get the repo from GitHub ...'
+      all_github.each do |r|
+        if filtered_name(r['name']).eql?(h5p_to_git_name(name))
+          repo = r['clone_url']
+          print_ok
+        end
+      end
+      exit_with_error if repo.nil?
+    end
+
+    print "Searching the most recent patch of #{fullname}: ".colorize(:yellow)
+    tag = get_last_patch(dependency['version'], repo)
+    puts tag
+
+    download_library(dest_folder, repo, tag)
+
+  end
+end
+
+print 'Cleaning folder structure ... '.colorize(:cyan)
+if remove_git_init_folders(folder)
+  print_ok
+else
+  exit_with_error
+end
+
+print 'Packing ... '.colorize(:cyan)
+outfile = "#{get_pkg_name(folder)}_#{Time.now.to_i}_.h5p"
+if unix_zip(folder, outfile)
+  print_ok
+else
+  exit_with_error
+end
+
+print "File stored as: ~/#{outfile} ".colorize(:yellow)
+puts '(Check yor home folder!)'
+puts 'DONE'.colorize({ color: :white, background: :blue})
