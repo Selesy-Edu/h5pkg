@@ -184,7 +184,7 @@ end
 # @param folder [String] Root folder of the H5P project
 # @return [Boolean]
 def remove_git_init_folders(folder)
-  system "( find #{folder} -type d -name '.git' && find . -name '.gitignore' && find . -name '.gitmodules' ) | xargs rm -rf "
+  system "cd #{folder} && ( find . -type d -name '.git' && find . -name '.gitignore' && find . -name '.gitmodules' ) | xargs rm -rf "
 end
 
 # Clones a Git tag (detached)
