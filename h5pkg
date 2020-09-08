@@ -217,9 +217,10 @@ end
 #
 # @param folder [String] Root folder of the H5P project
 # @param output_filename [String] File name of the ZIP
+# @param output_dir [String] Output directory 
 # @return [Boolean]
-def unix_zip(folder, output_filename)
-  system "cd #{folder} && zip -r -D -X #{output_filename} ./* && mv #{output_filename} ~"
+def unix_zip(folder, output_filename, output_dir)
+  system "cd #{folder} && zip -r -D -X #{output_filename} ./* && mv #{output_filename} #{output_dir}"
 end
 
 # Prints an error and sets an exit code
@@ -254,6 +255,7 @@ CANNOT_CLEAN_TEMP_DIR = 10
 
 argv_hashed = argv_to_hash(ARGV, {})
 temp_dir = File.expand_path('~/.h5pkg/temp')
+out_dir = File.expand_path('~/.h5pkg/out')
 
 if argv_hashed.empty? || !minimum_params?(argv_hashed)
   puts 'Usage: h5pkg pack [FOLDER]'
@@ -264,6 +266,7 @@ puts 'H5P Packer'.colorize({ color: :white, background: :magenta, mode: :blink }
 
 begin
   FileUtils.mkdir_p(temp_dir)
+  FileUtils.mkdir_p(out_dir)
 rescue Errno::EACCES
   puts 'Could not create temporal folder (Permission Denied)'
   exit COULDNT_CREATE_TEMP_DIR
@@ -400,16 +403,19 @@ end
 
 print 'Packing ... '.colorize(:cyan)
 outfile = "#{get_pkg_name(folder)}_#{Time.now.to_i}_.h5p"
-if unix_zip(temp_dir, outfile)
+if unix_zip(temp_dir, outfile, out_dir)
   print_ok
 else
   exit_with_error(CANNOT_ZIP_FILES)
 end
 
-print "File stored as: ~/#{outfile} ".colorize(:yellow)
-puts '(Check yor home folder!)'
+print "File stored as: #{out_dir}#{outfile} ".colorize(:yellow)
 
 unless remove_folders(File.expand_path('~/.h5pkg'), 'temp')
+  exit_with_error(CANNOT_CLEAN_TEMP_DIR)
+end
+
+unless remove_folders(File.expand_path('~/.h5pkg'), 'out')
   exit_with_error(CANNOT_CLEAN_TEMP_DIR)
 end
 
