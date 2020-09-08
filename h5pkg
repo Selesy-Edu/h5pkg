@@ -74,7 +74,7 @@ end
 
 # Checks if the h5p folder has the required files by specification
 #
-# @param folder [String] Path of the folder which contains the H5P project
+# @param folder [String] Absolute path of the folder which contains the H5P project
 # @return [Hash] A hash which shows the required files as keys and boolean values
 # representing the existence of the file
 def check_h5p_folder_integrity(folder)
@@ -219,6 +219,7 @@ def print_ok
 end
 
 # ------------------------------------------- START ------------------------------------------------ #
+
 NEEDS_MORE_PARAMS = 1
 COULDNT_CREATE_TEMP_DIR = 2
 LIBRARY_JSON_NOT_FOUND = 3
@@ -228,7 +229,7 @@ CANNOT_CLEAN_DIR_STRUCTURE = 6
 CANNOT_ZIP_FILES = 7
 
 argv_hashed = argv_to_hash(ARGV, {})
-temp_dir = '~/.h5pkg/temp'
+temp_dir = File.expand_path('~/.h5pkg/temp')
 
 if argv_hashed.empty? || !minimum_params?(argv_hashed)
   puts 'Usage: h5pkg pack [FOLDER]'
@@ -244,7 +245,7 @@ rescue Errno::EACCES
   exit COULDNT_CREATE_TEMP_DIR
 end
 
-folder = argv_hashed['pack'].delete_suffix('/')
+folder = File.expand_path(argv_hashed['pack'].delete_suffix('/'))
 required_files = check_h5p_folder_integrity(folder)
 
 print 'Checking if library.json exists ... '.colorize(:cyan)
@@ -260,6 +261,8 @@ if required_files['semantics.json'] == false
 else
   print_ok
 end
+
+
 
 puts 'Checking for dependencies ... '.colorize(:cyan)
 registry = setup_https_h5p_registry(retrieve_h5p_registry)
@@ -298,7 +301,6 @@ else
     puts tag
 
     download_library(dest_folder, repo, tag)
-
   end
 end
 
@@ -319,4 +321,4 @@ end
 
 print "File stored as: ~/#{outfile} ".colorize(:yellow)
 puts '(Check yor home folder!)'
-puts 'DONE'.colorize({ color: :white, background: :blue})
+puts 'DONE'.colorize({ color: :white, background: :blue })
