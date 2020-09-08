@@ -204,13 +204,13 @@ end
 # @param output_filename [String] File name of the ZIP
 # @return [Boolean]
 def unix_zip(folder, output_filename)
-  system "cd #{folder} && zip -r #{output_filename} ./* && mv #{output_filename} ~"
+  system "cd #{folder} && zip -r -D -X #{output_filename} ./* && mv #{output_filename} ~"
 end
 
 # Prints an error and sets an exit code
-def exit_with_error
+def exit_with_error(errno)
   puts 'ERROR'.colorize({ color: :white, background: :red })
-  exit(-1)
+  exit(errno)
 end
 
 # Prints OK
@@ -219,32 +219,44 @@ def print_ok
 end
 
 # ------------------------------------------- START ------------------------------------------------ #
+NEEDS_MORE_PARAMS = 1
+COULDNT_CREATE_TEMP_DIR = 2
+LIBRARY_JSON_NOT_FOUND = 3
+SEMANTICS_JSON_NOT_FOUND = 4
+CANNOT_FIND_LIBRARY_REPO = 5
+CANNOT_CLEAN_DIR_STRUCTURE = 6
+CANNOT_ZIP_FILES = 7
 
 argv_hashed = argv_to_hash(ARGV, {})
 temp_dir = '~/.h5pkg/temp'
 
-FileUtils.mkdir_p temp_dir
-
 if argv_hashed.empty? || !minimum_params?(argv_hashed)
   puts 'Usage: h5pkg pack [FOLDER]'
-  exit(-1)
+  exit NEEDS_MORE_PARAMS
 end
 
 puts 'H5P Packer'.colorize({ color: :white, background: :magenta, mode: :blink })
+
+begin
+  FileUtils.mkdir_p(temp_dir)
+rescue Errno::EACCES
+  puts 'Could not create temporal folder (Permission Denied)'
+  exit COULDNT_CREATE_TEMP_DIR
+end
 
 folder = argv_hashed['pack'].delete_suffix('/')
 required_files = check_h5p_folder_integrity(folder)
 
 print 'Checking if library.json exists ... '.colorize(:cyan)
 if required_files['library.json'] == false
-  exit_with_error
+  exit_with_error(LIBRARY_JSON_NOT_FOUND)
 else
   print_ok
 end
 
 print 'Checking if semantics.json exists ... '.colorize(:cyan)
 if required_files['semantics.json'] == false
-  exit_with_error
+  exit_with_error(SEMANTICS_JSON_NOT_FOUND)
 else
   print_ok
 end
@@ -278,7 +290,7 @@ else
           print_ok
         end
       end
-      exit_with_error if repo.nil?
+      exit_with_error(CANNOT_FIND_LIBRARY_REPO) if repo.nil?
     end
 
     print "Searching the most recent patch of #{fullname}: ".colorize(:yellow)
@@ -294,7 +306,7 @@ print 'Cleaning folder structure ... '.colorize(:cyan)
 if remove_git_init_folders(folder)
   print_ok
 else
-  exit_with_error
+  exit_with_error(CANNOT_CLEAN_DIR_STRUCTURE)
 end
 
 print 'Packing ... '.colorize(:cyan)
@@ -302,7 +314,7 @@ outfile = "#{get_pkg_name(folder)}_#{Time.now.to_i}_.h5p"
 if unix_zip(folder, outfile)
   print_ok
 else
-  exit_with_error
+  exit_with_error(CANNOT_ZIP_FILES)
 end
 
 print "File stored as: ~/#{outfile} ".colorize(:yellow)
