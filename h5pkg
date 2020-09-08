@@ -99,11 +99,15 @@ end
 #
 # @note It returns the name without dots
 # @param folder [String] Root folder of the H5P project
+# @param nopatch [Boolean] Returns name without patch version
 # @return [String]
-def get_pkg_name(folder)
+def get_pkg_name(folder, nopatch=false)
   file = File.read("#{folder}/library.json")
   j = JSON.parse(file)
-  "#{j['machineName'].gsub('.', '')}-#{j['majorVersion']}.#{j['minorVersion']}.#{j['patchVersion']}"
+
+  return "#{j['machineName']}-#{j['majorVersion']}.#{j['minorVersion']}" if nopatch
+
+  "#{j['machineName']}-#{j['majorVersion']}.#{j['minorVersion']}.#{j['patchVersion']}"
 end
 
 # Generate a list of dependencies with a given H5P project folder
@@ -180,12 +184,23 @@ rescue RestClient::NotFound
   false
 end
 
-# Remove .git folders recursively
+# Remove folders recursively
 #
 # @param folder [String] Root folder of the H5P project
+# @param target [String] Name of the folder to be deleted
 # @return [Boolean]
-def remove_git_init_folders(folder)
-  system "cd #{folder} && ( find . -type d -name '.git' && find . -name '.gitignore' && find . -name '.gitmodules' ) | xargs rm -rf "
+def remove_folders(folder, target)
+  system "cd #{folder} && ( find . -type d -name '#{target}' ) | xargs rm -rf "
+end
+
+# Remove files recursively
+#
+# @param folder [String] Root folder of the H5P project
+# @param allowed_ext_list [Array<String>] Allowed extensions list
+# @return [Boolean]
+def remove_files(folder, allowed_ext_list)
+  egrep_str = allowed_ext_list.join('|')
+  system "cd #{folder} && ( find . -type f -name '*' ) | egrep -v \"(#{egrep_str})$\" | xargs rm -f "
 end
 
 # Clones a Git tag (detached)
@@ -218,15 +233,24 @@ def print_ok
   puts 'OK'.colorize({ color: :white, background: :green })
 end
 
+def find_dep(deplist, name)
+  deplist.each do |element|
+    return element if element['name'] == name
+  end
+end
+
 # ------------------------------------------- START ------------------------------------------------ #
 
 NEEDS_MORE_PARAMS = 1
 COULDNT_CREATE_TEMP_DIR = 2
 LIBRARY_JSON_NOT_FOUND = 3
 SEMANTICS_JSON_NOT_FOUND = 4
-CANNOT_FIND_LIBRARY_REPO = 5
-CANNOT_CLEAN_DIR_STRUCTURE = 6
-CANNOT_ZIP_FILES = 7
+COULDNT_CREATE_HTTPS_H5P_REGISTRY = 5
+CANNOT_FIND_LIBRARY_REPO = 6
+CANNOT_CLEAN_DIR_STRUCTURE = 7
+CANNOT_CLEAN_UNWANTED_FILES = 8
+CANNOT_ZIP_FILES = 9
+CANNOT_CLEAN_TEMP_DIR = 10
 
 argv_hashed = argv_to_hash(ARGV, {})
 temp_dir = File.expand_path('~/.h5pkg/temp')
@@ -262,11 +286,13 @@ else
   print_ok
 end
 
-
+base_folder = "#{temp_dir}/#{get_pkg_name(folder, true)}"
+FileUtils.mkdir_p(base_folder)
+FileUtils.cp_r("#{folder}/.", base_folder)
 
 puts 'Checking for dependencies ... '.colorize(:cyan)
 registry = setup_https_h5p_registry(retrieve_h5p_registry)
-exit_with_error if registry.empty?
+exit_with_error(COULDNT_CREATE_HTTPS_H5P_REGISTRY) if registry.empty?
 
 all_github = get_all_h5p_github
 
@@ -279,7 +305,7 @@ else
   deplist.each do |dependency|
     name = dependency['name']
     fullname = "#{name}-#{dependency['version']}"
-    dest_folder = "#{folder}/#{fullname}"
+    dest_folder = "#{temp_dir}/#{fullname}"
 
     next if Dir.exist?(dest_folder)
 
@@ -304,8 +330,69 @@ else
   end
 end
 
+qs_version = find_dep(deplist, 'H5PEditor.QuestionSetTextualEditor')
+if qs_version
+  puts 'Building H5PEditor.QuestionSetTextualEditor...'
+  system("cd #{temp_dir}/#{qs_version['name']}-#{qs_version['version']} && npm install && npm run build")
+end
+
 print 'Cleaning folder structure ... '.colorize(:cyan)
-if remove_git_init_folders(folder)
+alloweds = [
+  '.bmp',
+  '.css',
+  '.csv',
+  '.diff',
+  '.doc',
+  '.docx',
+  '.eof',
+  '.eot',
+  '.gif',
+  '.jpeg',
+  '.jpg',
+  '.js',
+  '.json',
+  '.mp3',
+  '.mp4',
+  '.m4a',
+  '.odp',
+  '.ods',
+  '.odt',
+  '.ogg',
+  '.otf',
+  '.patch',
+  '.pdf',
+  '.png',
+  '.ppt',
+  '.pptx',
+  '.rtf',
+  '.svg',
+  '.swf',
+  '.textile',
+  '.tif',
+  '.tiff',
+  '.ttf',
+  '.txt',
+  '.wav',
+  '.webm',
+  '.woff',
+  '.woff2',
+  '.xls',
+  '.xlsx',
+  '.xml',
+  '.md',
+  '.textile',
+  '.vtt'
+]
+
+cleans = [
+  remove_folders(temp_dir, '.git'),
+  remove_folders(temp_dir, 'test'),
+  remove_folders(temp_dir, 'scss'),
+  remove_folders(temp_dir, 'node_modules'),
+  remove_files(temp_dir, alloweds)
+]
+
+if cleans.all?
   print_ok
 else
   exit_with_error(CANNOT_CLEAN_DIR_STRUCTURE)
@@ -313,7 +400,7 @@ end
 
 print 'Packing ... '.colorize(:cyan)
 outfile = "#{get_pkg_name(folder)}_#{Time.now.to_i}_.h5p"
-if unix_zip(folder, outfile)
+if unix_zip(temp_dir, outfile)
   print_ok
 else
   exit_with_error(CANNOT_ZIP_FILES)
@@ -321,4 +408,9 @@ end
 
 print "File stored as: ~/#{outfile} ".colorize(:yellow)
 puts '(Check yor home folder!)'
+
+unless remove_folders(File.expand_path('~/.h5pkg'), 'temp')
+  exit_with_error(CANNOT_CLEAN_TEMP_DIR)
+end
+
 puts 'DONE'.colorize({ color: :white, background: :blue })
