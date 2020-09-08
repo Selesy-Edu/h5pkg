@@ -5,6 +5,7 @@ require 'json'
 require 'rest-client'
 require 'mkmf'
 require 'colorize'
+require 'fileutils'
 
 # Convert ARGV to a Hash using pairs of argv
 #
@@ -220,6 +221,9 @@ end
 # ------------------------------------------- START ------------------------------------------------ #
 
 argv_hashed = argv_to_hash(ARGV, {})
+temp_dir = '~/.h5pkg/temp'
+
+FileUtils.mkdir_p temp_dir
 
 if argv_hashed.empty? || !minimum_params?(argv_hashed)
   puts 'Usage: h5pkg pack [FOLDER]'
