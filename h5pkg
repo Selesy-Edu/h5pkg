@@ -220,12 +220,13 @@ end
 # @param output_dir [String] Output directory 
 # @return [Boolean]
 def unix_zip(folder, output_filename, output_dir)
-  system "cd #{folder} && zip -r -D -X #{output_filename} ./* 2>/dev/null && mv #{output_filename} #{output_dir}/"
+  system "cd #{folder} && zip -q -r -D -X #{output_filename} ./* && mv #{output_filename} #{output_dir}/"
 end
 
 # Prints an error and sets an exit code
 def exit_with_error(errno)
   puts 'ERROR'.colorize({ color: :white, background: :red })
+  puts "The program has abnormally terminated with status code #{errno}".colorize({ color: :red })
   exit(errno)
 end
 
@@ -252,6 +253,7 @@ CANNOT_CLEAN_DIR_STRUCTURE = 7
 CANNOT_CLEAN_UNWANTED_FILES = 8
 CANNOT_ZIP_FILES = 9
 CANNOT_CLEAN_TEMP_DIR = 10
+ERROR_DOWNLOADING_LIBRARY = 11
 
 # Clean old files
 remove_folders(File.expand_path('~'), '.h5pkg')
@@ -334,14 +336,15 @@ else
     tag = get_last_patch(dependency['version'], repo)
     puts tag
 
-    download_library(dest_folder, repo, tag)
+    downloaded = download_library(dest_folder, repo, tag)
+    exit_with_error(ERROR_DOWNLOADING_LIBRARY) unless downloaded
   end
 end
 
 qs_version = find_dep(deplist, 'H5PEditor.QuestionSetTextualEditor')
 if qs_version
   puts 'Building H5PEditor.QuestionSetTextualEditor...'
-  system("cd #{temp_dir}/#{qs_version['name']}-#{qs_version['version']} && npm install && npm run build")
+  system("cd #{temp_dir}/#{qs_version['name']}-#{qs_version['version']} && npm install 2>/dev/null && npm run build")
 end
 
 print 'Cleaning folder structure ... '.colorize(:cyan)
