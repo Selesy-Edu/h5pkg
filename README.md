@@ -10,6 +10,8 @@ You also need to install some Ruby gems:
   ```gem install rest-client```
 - colorize
   ```gem install colorize```
+- fileutils
+  ```gem install fileutils```
 
 In some systems, ```rest-client``` needs the C headers of Ruby and some build tools. If you have any problem, try to install ```ruby-dev``` first using your preferred package manager.
 
@@ -18,7 +20,7 @@ Remember to give execution permissions to the script
 ## Usage
 ```./h5pkg pack <folder>```
 
-Where ```<folder>``` is the path of the folder to your H5P file structure. If packaging succeeds, you can find your H5P package stored in your HOME directory.
+Where ```<folder>``` is the path of the folder to your H5P file structure. If packaging succeeds, you can find your H5P package stored in ~/.h5pkg/out directory.
 
 ## Documentation
 For documentation, please install the YARD gem: 
