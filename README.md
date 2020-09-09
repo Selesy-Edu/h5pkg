@@ -29,4 +29,20 @@ For documentation, please install the YARD gem:
 If you want to see the docs in a local server please and use ```yardoc h5pkg``` to generate docs and ```yard server``` to run a local server. Open your browser and go to *localhost:8808*
 
 ## Notes
-Until now, we only have npm build support to the *QuestionSetTextualEditor* component. 
+Until now, we only have npm build support to the *QuestionSetTextualEditor* component.
+
+## Exit codes
+Exit codes can be useful in case you get an abnormal termination of the program. 
+| Code | Symbol | Reason |
+| --- | --- | ---|
+| 1 | NEEDS_MORE_PARAMS |Not enough parameters |
+| 2 | COULDNT_CREATE_TEMP_DIR | Couldn't create a temporary directory to store the data. Please check write permissions on your home directory |
+| 3 | LIBRARY_JSON_NOT_FOUND | Couldn't find the *library.json* file inside the H5P root directory you gave to the command line. Please check if the directory contains H5P valid data |
+| 4 | SEMANTICS_JSON_NOT_FOUND | Couldn't find the *semantics.json* file inside the H5P root directory you gave to the command line. Please check if the directory contains H5P valid data|
+| 5 | COULDNT_CREATE_HTTPS_H5P_REGISTRY | There was any error trying to download the registry from h5p.org, or trying to translate the registry addresses from ssh to https |
+| 6 | CANNOT_FIND_LIBRARY_REPO | The program was unable to find a dependency neither in the H5P registry nor GitHub's H5P repository. |
+| 7 | CANNOT_CLEAN_DIR_STRUCTURE| Couldn't remove folders forbidden by the H5P Specification. Please check the permissions and the ownership of the directory structure |
+| 8 | CANNOT_CLEAN_UNWANTED_FILES | Couldn't remove files forbidden by the H5P Specification. Please check the permissions and the ownership of the files |
+| 9 | CANNOT_ZIP_FILES | There was an error trying to zip the files. Remember you should have ```zip``` installed |
+| 10 | CANNOT_CLEAN_TEMP_DIR | Couldn't remove the temporal file structure made to build the H5P package. Please check permissions and ownership |
+| 11 | ERROR_DOWNLOADING_LIBRARY | There was a network error trying to download a remote dependency. Check network connectivity and try again |
