@@ -210,7 +210,7 @@ end
 # @param pkg_ver [String] tag (branch)
 # @return [Boolean]
 def download_library(dest_folder, git_repo_url, pkg_ver)
-  system "git clone #{git_repo_url} --branch #{pkg_ver} --single-branch #{dest_folder}"
+  system "git clone #{git_repo_url} --branch #{pkg_ver} --single-branch #{dest_folder} 2>/dev/null"
 end
 
 # Zips recursively a folder and moves the zip to home
@@ -220,7 +220,7 @@ end
 # @param output_dir [String] Output directory 
 # @return [Boolean]
 def unix_zip(folder, output_filename, output_dir)
-  system "cd #{folder} && zip -r -D -X #{output_filename} ./* && mv #{output_filename} #{output_dir}/"
+  system "cd #{folder} && zip -r -D -X #{output_filename} ./* 2>/dev/null && mv #{output_filename} #{output_dir}/"
 end
 
 # Prints an error and sets an exit code

@@ -27,3 +27,6 @@ For documentation, please install the YARD gem:
 ```gem install yard```
 
 If you want to see the docs in a local server please and use ```yardoc h5pkg``` to generate docs and ```yard server``` to run a local server. Open your browser and go to *localhost:8808*
+
+## Notes
+Until now, we only have npm build support to the *QuestionSetTextualEditor* component. 
