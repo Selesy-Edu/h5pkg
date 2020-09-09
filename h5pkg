@@ -277,8 +277,6 @@ rescue Errno::EACCES
   exit COULDNT_CREATE_TEMP_DIR
 end
 
-
-
 folder = File.expand_path(argv_hashed['pack'].delete_suffix('/'))
 required_files = check_h5p_folder_integrity(folder)
 
